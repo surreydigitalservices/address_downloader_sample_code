@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+    <meta charset="utf-8" />
+    <title>Address Downloader Sample Code</title>
+    <head>
+        <link rel="stylesheet" href="http://code.jquery.com/ui/1.9.2/themes/base/jquery-ui.css" />
+        <script src="http://code.jquery.com/jquery-1.8.3.js"></script>
+        <script src="http://code.jquery.com/ui/1.9.2/jquery-ui.js"></script>  
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+  
+        <!-- Latest compiled and minified CSS -->
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+
+        <!-- Optional theme -->
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap-theme.min.css" integrity="sha384-fLW2N01lMqjakBkx3l/M9EahuwpSfeNvV63J5ezn3uZzapT0u7EYsXMjQV+0En5r" crossorigin="anonymous">
+
+        <!-- Latest compiled and minified JavaScript -->
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js" integrity="sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS" crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.css" />
+        <link rel="stylesheet" href="http://leaflet.github.io/Leaflet.draw/leaflet.draw.css" />
+        <link rel="stylesheet" href="http://k4r573n.github.io/leaflet-control-osm-geocoder/Control.OSMGeocoder.css"/>
+            <style>
+                <!-- html, body, #map {
+                height:100%;
+                width:100%;
+                padding:0px;
+                margin:0px;
+                }  -->
+            </style>
+    </head>
+    <body>
+    <script src="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.js"></script>
+            <script src="http://leaflet.github.io/Leaflet.draw/leaflet.draw.js"></script>
+            <script src="http://k4r573n.github.io/leaflet-control-osm-geocoder/Control.OSMGeocoder.js"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.12.0/moment.min.js"></script>
+            <script src='https://api.mapbox.com/mapbox.js/plugins/leaflet-geodesy/v0.1.0/leaflet-geodesy.js'></script>
+        <div class="container body-content">
+            <div class="jumbotron">
+                <h1>Address Downloader</h1>
+                <p class="lead">Use this service to download addresses for mailing lists.</p>
+            </div>
+            
+            <H4>Instructions</h4>
+            <ol>
+                <li>Draw a polygon on the map</li>
+                <li>Select whether you want commercial or residential addresses or both</li>
+                <li>Click 'Get your addresses'</li>
+                <li>You will get a download link when your address file has built</li>
+            </ol>
+            
+            <!--<div id="map" style="width: 600px; height: 400px"></div>-->
+            <div id="map" style="width: 100%; height: 400px"></div>
+    
+            
+            <script>
+                var map = L.map('map').setView([51.352915, -0.599373], 17);
+
+                L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+}).addTo(map);
+
+                var osmGeocoder = new L.Control.OSMGeocoder({
+                            collapsed: false,
+                            position: 'bottomright',
+                            text: 'Find!',
+                            });
+                        map.addControl(osmGeocoder);
+
+
+
+                var drawnItems = new L.FeatureGroup();
+                    map.addLayer(drawnItems);
+
+                    var drawControlFull = new L.Control.Draw({
+                        edit: {
+                            featureGroup: drawnItems
+                        },
+                        draw: {
+                            polyline: false,
+                            rect:   false,
+                            circle: false,
+                            marker: false,
+                    polygon: {allowIntersection: false,
+                        drawError: {
+                            color: 'orange',
+                            timeout: 1000
+                        },
+                        showArea:true,
+                        }
+                    }
+                    });
+
+
+                var drawControlEditOnly = new L.Control.Draw({
+                    edit: {
+                        featureGroup: drawnItems
+                    },
+                    draw: false
+                });
+
+                map.addControl(drawControlFull);
+                
+                map.on("draw:created", function (e) {
+                    var layer = e.layer;
+                    layer.addTo(drawnItems);
+                    drawControlFull.removeFrom(map);
+                    drawControlEditOnly.addTo(map)
+                    
+                //Capture the drawn items to geojson  
+                var feature = e.layer.toGeoJSON();
+            
+            //write the geojson to the console to see what we have got
+                console.log(feature)
+
+            //get the area of the polygon drawn using Leaflet Geodesy plugin
+            var polygonarea = (LGeo.area(e.layer));
+            console.log(polygonarea)
+
+            
+            //Calculate if the polygon is over a certain size in sq metres and if it is put a 
+            //bootstrap warning up with a page refresh button
+		//The javascript:history.go(0) resets javascript objects to zero (ie clears out the old polygon)
+            if (polygonarea > 250000) {$('#submit2').after('<button type="button" class="btn btn-warning btn-lg btn-block"><A HREF="javascript:history.go(0)">Your Polygon is too large.</br>Click here to draw a new one</a></button>');}
+
+
+            $("#submit2").click(function()
+                            {
+                // Pop up a spinning gif while we wait for FME to respond to our search request            
+                $('#loadingmessage').show();
+
+                            $.ajax(
+                                    {
+                                        url : "https://yourfmeserver.fmecloud.com/fmedatadownload/path_to_your_fme_workspace.fmw?opt_servicemode=sync&opt_responseformat=json" + "&" + $( '#userselection' ).serialize(),
+                                        //ensure the form name in the serialize command above has a hash in front else it won't work!
+                                        //also ensure your fields in the  form contain a 'name' tag else again the serialise function won't work.
+                                        processData : false,
+                                        type: 'POST',
+                                        dataType : "json",
+                                        contentType: 'application/json',
+                                        data: JSON.stringify(feature),
+                                        success:function(data){
+                                            //alert(data.serviceResponse.url);
+                                            var mynewurl = data.serviceResponse.url;
+						//Write the download URL that FME provides to the console so we can check it.
+                                            console.log(mynewurl);
+						//Hide the spinning download gif again.
+                                            $('#loadingmessage').hide();
+                                            //This creates a bootstrap alert after the submit2 button with the download URL that FME provided plus
+					    // a start a new search button which resets the page.
+
+                                            $('#submit2').after('<div class="alert alert-success"><strong>Congratulations</strong>  Your addresses can be downloaded <a href="'+ mynewurl + ' "><strong>HERE</strong></a><button type="button" class="btn btn-info btn-lg btn-block"><A HREF="javascript:history.go(0)">Start a new search</a></button></div>');
+
+                                            
+                                            console.log(data);},
+                                        error: function(data) {
+                                            $('#output').text(data.responseText);
+                                            console.log(data.responseText); }
+                                    }
+                            );
+                            }
+                )
+                });
+                
+                map.on("draw:deleted", function(e) {
+                check =  Object.keys(drawnItems._layers).length;
+                console.log(check);
+                    if (check === 0){
+                        drawControlEditOnly.removeFrom(map);
+                        drawControlFull.addTo(map);
+                        
+                                };
+                });
+            </script>
+
+
+                <form id="userselection">
+                    <h4>Data Download</h4>
+                    <p class="help-block"> Please select the type of data you requre.</p>
+                    <div class="form-group">
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox"  id="comm_prop" name="commercial">Commercial Properties
+                            </label>
+                        </div>
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox" id="res_prop" name="Residential">Residential Properties
+                            </label>
+                        </div>
+                    </div>
+                </form>
+                <div id='loadingmessage' style='display:none'>
+                    <img src='path_to_the_gif_you_are_using.gif' class="img-responsive" />
+                </div>
+                <button type="button" class="btn btn-primary" id="submit2" >Get your addresses!</button>
+                <div class="bootstrapalert"></div>
+            </div>
+        </div>
+    </body>
+</html>
